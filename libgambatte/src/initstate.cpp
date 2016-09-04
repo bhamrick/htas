@@ -1166,17 +1166,17 @@ void gambatte::setInitState(SaveState &state, const bool cgb, const bool gbaCgbM
 		0x83, 0x40, 0x0B, 0x77
 	};
 	
-	state.cpu.cycleCounter = cgb ? 0x102A0 : 0x102A0 + 0x8D2C;
+	state.cpu.cycleCounter = 0x639734 * 2;
 	state.cpu.PC = 0x100;
 	state.cpu.SP = 0xFFFE;
-	state.cpu.A = cgb * 0x10 | 0x01;
-	state.cpu.B = cgb & gbaCgbMode;
-	state.cpu.C = 0x13;
+	state.cpu.A = 0x11;
+	state.cpu.B = 0x14;
+	state.cpu.C = 0x00;
 	state.cpu.D = 0x00;
-	state.cpu.E = 0xD8;
-	state.cpu.F = 0xB0;
-	state.cpu.H = 0x01;
-	state.cpu.L = 0x4D;
+	state.cpu.E = 0x08;
+	state.cpu.F = 0x80;
+	state.cpu.H = 0x00;
+	state.cpu.L = 0x7C;
 	state.cpu.skip = false;
 	
 	std::memset(state.mem.sram.ptr, 0xFF, state.mem.sram.getSz());
@@ -1234,7 +1234,7 @@ void gambatte::setInitState(SaveState &state, const bool cgb, const bool gbaCgbM
 	std::memset(state.ppu.spAttribList, 0, sizeof(state.ppu.spAttribList));
 	std::memset(state.ppu.spByte0List, 0, sizeof(state.ppu.spByte0List));
 	std::memset(state.ppu.spByte1List, 0, sizeof(state.ppu.spByte1List));
-	state.ppu.videoCycles = cgb ? 144*456ul + 164 : 153*456ul + 396;
+	state.ppu.videoCycles = 67472;
 	state.ppu.enableDisplayM0Time = state.cpu.cycleCounter;
 	state.ppu.winYPos = 0xFF;
 	state.ppu.xpos = 0;
