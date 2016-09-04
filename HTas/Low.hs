@@ -126,3 +126,100 @@ isCgb gb = toInteger <$> gambatte_iscgb gb
 
 cpuRead :: GB -> Integer -> IO Word8
 cpuRead gb addr = gambatte_cpuread gb (fromInteger addr)
+
+data TraceData = TraceData
+    { trace_cycle :: Int
+    , trace_PC :: Int
+    , trace_SP :: Int
+    , trace_A :: Int
+    , trace_B :: Int
+    , trace_C :: Int
+    , trace_D :: Int
+    , trace_E :: Int
+    , trace_F :: Int
+    , trace_H :: Int
+    , trace_L :: Int
+    , trace_skip :: Int
+    , trace_opcode :: Int
+    , trace_LY :: Int
+    } deriving (Eq, Show, Ord)
+
+instance Storable TraceData where
+    sizeOf _ = 14 * sizeOf (undefined :: CInt)
+    alignment _ = 1
+    peek p = do
+        let p' = castPtr p :: Ptr CInt
+        cycle <- peekElemOff p' 0
+        pc <- peekElemOff p' 1
+        sp <- peekElemOff p' 2
+        a <- peekElemOff p' 3
+        b <- peekElemOff p' 4
+        c <- peekElemOff p' 5
+        d <- peekElemOff p' 6
+        e <- peekElemOff p' 7
+        f <- peekElemOff p' 8
+        h <- peekElemOff p' 9
+        l <- peekElemOff p' 10
+        skip <- peekElemOff p' 11
+        opcode <- peekElemOff p' 12
+        ly <- peekElemOff p' 13
+        pure $ TraceData
+            { trace_cycle = fromIntegral cycle
+            , trace_PC = fromIntegral pc
+            , trace_SP = fromIntegral sp
+            , trace_A = fromIntegral a
+            , trace_B = fromIntegral b
+            , trace_C = fromIntegral c
+            , trace_D = fromIntegral d
+            , trace_E = fromIntegral e
+            , trace_F = fromIntegral f
+            , trace_H = fromIntegral h
+            , trace_L = fromIntegral l
+            , trace_skip = fromIntegral skip
+            , trace_opcode = fromIntegral opcode
+            , trace_LY = fromIntegral ly
+            }
+    poke p dat = do
+        let p' = castPtr p :: Ptr CInt
+        pokeElemOff p' 0 (fromIntegral $ trace_cycle dat)
+        pokeElemOff p' 1 (fromIntegral $ trace_PC dat)
+        pokeElemOff p' 2 (fromIntegral $ trace_SP dat)
+        pokeElemOff p' 3 (fromIntegral $ trace_A dat)
+        pokeElemOff p' 4 (fromIntegral $ trace_B dat)
+        pokeElemOff p' 5 (fromIntegral $ trace_C dat)
+        pokeElemOff p' 6 (fromIntegral $ trace_D dat)
+        pokeElemOff p' 7 (fromIntegral $ trace_E dat)
+        pokeElemOff p' 8 (fromIntegral $ trace_F dat)
+        pokeElemOff p' 9 (fromIntegral $ trace_H dat)
+        pokeElemOff p' 10 (fromIntegral $ trace_L dat)
+        pokeElemOff p' 11 (fromIntegral $ trace_skip dat)
+        pokeElemOff p' 12 (fromIntegral $ trace_opcode dat)
+        pokeElemOff p' 13 (fromIntegral $ trace_LY dat)
+
+setTraceCallback :: GB -> (TraceData -> IO ()) -> IO ()
+setTraceCallback gb cb = do
+    cCallback <- createTraceCallback cb'
+    gambatte_settracecallback gb cCallback
+    where
+    cb' :: Ptr () -> IO ()
+    cb' p = peek (castPtr p) >>= cb
+
+traceRegs :: TraceData -> Regs
+traceRegs dat =
+    Regs
+        { reg_PC = trace_PC dat
+        , reg_SP = trace_SP dat
+        , reg_A = trace_A dat
+        , reg_B = trace_B dat
+        , reg_C = trace_C dat
+        , reg_D = trace_D dat
+        , reg_E = trace_E dat
+        , reg_F = trace_F dat
+        , reg_H = trace_H dat
+        , reg_L = trace_L dat
+        }
+
+loadSaveData :: GB -> ByteString -> IO ()
+loadSaveData gb dat = do
+    BS.useAsCString dat $ \cDat ->
+        gambatte_loadsavedata gb cDat

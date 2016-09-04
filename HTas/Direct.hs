@@ -43,3 +43,9 @@ foreign import ccall "gambatte_setexeccallback" gambatte_setexeccallback :: GB -
 foreign import ccall "wrapper" createCallback :: (CUInt -> IO ()) -> IO (FunPtr (CUInt -> IO ()))
 
 foreign import ccall "gambatte_cpuread" gambatte_cpuread :: GB -> CUShort -> IO Word8
+
+foreign import ccall "gambatte_settracecallback" gambatte_settracecallback :: GB -> FunPtr (Ptr () -> IO ()) -> IO ()
+
+foreign import ccall "wrapper" createTraceCallback :: (Ptr () -> IO ()) -> IO (FunPtr (Ptr () -> IO ()))
+
+foreign import ccall "gambatte_loadsavedata" gambatte_loadsavedata :: GB -> CString -> IO ()

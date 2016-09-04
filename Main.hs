@@ -15,12 +15,16 @@ main = do
     gb <- create
     loadRomFile gb "pokered.gbc"
     isCgb gb >>= print
+    loadSaveData gb (BS.replicate 0x2000 0xFF)
 
-    setExecCallback gb (\addr -> do
-        when (addr == 0x7A97) $ do
+    setTraceCallback gb (\dat -> do
+        let addr = trace_PC dat
+            cycle = trace_cycle dat
+            regs = traceRegs dat
+        when (addr == 0x7A9F) $ do
             getMemoryArea gb HRAM >>= dumpData
-            getRegs gb >>= printRegs
-            getCycleCount gb >>= \cyc -> printf "cycle = %d ; divider = %x\n" cyc (cyc `div` 2)
+            printRegs regs
+            printf "cycle = %d ; divider = %x\n" cycle (cycle `div` 2)
             cpuRead gb 0xFF04 >>= printf "rDiv = %02x\n"
             putStrLn ""
         )
