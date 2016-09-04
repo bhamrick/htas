@@ -134,6 +134,8 @@ public:
 
 	void GetRegs(int *dest);
 
+    long GetCycleCount();
+
 	template<bool isReader>void SyncState(NewState *ns);
 
 private:

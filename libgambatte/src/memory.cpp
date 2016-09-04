@@ -258,7 +258,7 @@ unsigned long Memory::event(unsigned long cycleCounter) {
 	case INTERRUPTS:
 		if (halted()) {
 			// if (isCgb())
-            cycleCounter += 4;
+                cycleCounter += 4;
 			
 			intreq.unhalt();
 			intreq.setEventTime<UNHALT>(DISABLED_TIME);

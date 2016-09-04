@@ -223,6 +223,10 @@ void GB::GetRegs(int *dest) {
 	p_->cpu.GetRegs(dest);
 }
 
+long GB::GetCycleCount() {
+    return p_->cpu.GetCycleCount();
+}
+
 SYNCFUNC(GB)
 {
 	SSS(p_->cpu);

@@ -124,6 +124,8 @@ public:
 
 	void GetRegs(int *dest);
 
+    long GetCycleCount() { return cycleCounter_; }
+
 	template<bool isReader>void SyncState(NewState *ns);
 };
 

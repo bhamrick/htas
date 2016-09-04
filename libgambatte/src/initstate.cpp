@@ -1191,7 +1191,7 @@ void gambatte::setInitState(SaveState &state, const bool cgb, const bool gbaCgbM
 		setInitialDmgIoamhram(state.mem.ioamhram.ptr);
 	}
 	
-	state.mem.ioamhram.ptr[0x104] = 0x1C;
+	state.mem.ioamhram.ptr[0x104] = 0x00;
 	state.mem.ioamhram.ptr[0x140] = 0x91;
 	state.mem.ioamhram.ptr[0x144] = 0x00;
 	
@@ -1234,7 +1234,7 @@ void gambatte::setInitState(SaveState &state, const bool cgb, const bool gbaCgbM
 	std::memset(state.ppu.spAttribList, 0, sizeof(state.ppu.spAttribList));
 	std::memset(state.ppu.spByte0List, 0, sizeof(state.ppu.spByte0List));
 	std::memset(state.ppu.spByte1List, 0, sizeof(state.ppu.spByte1List));
-	state.ppu.videoCycles = 67472;
+	state.ppu.videoCycles = 0x94 * 456ul - 16;
 	state.ppu.enableDisplayM0Time = state.cpu.cycleCounter;
 	state.ppu.winYPos = 0xFF;
 	state.ppu.xpos = 0;

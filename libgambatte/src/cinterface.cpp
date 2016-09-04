@@ -196,3 +196,8 @@ GBEXPORT void gambatte_getregs(GB *g, int *dest)
 {
 	g->GetRegs(dest);
 }
+
+GBEXPORT long gambatte_getcyclecount(GB *g)
+{
+    return g->GetCycleCount();
+}
