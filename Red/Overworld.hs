@@ -31,33 +31,18 @@ getLocation gb = do
         , locY = y
         }
 
-data Direction
-    = D_Left
-    | D_Up
-    | D_Down
-    | D_Right
-    deriving (Eq, Show, Ord)
-
-directionInput :: Direction -> Input
-directionInput d =
-    case d of
-        D_Left -> i_Left
-        D_Up -> i_Up
-        D_Down -> i_Down
-        D_Right -> i_Right
-
 -- Walk with buffered inputs
 -- Aborts if a battle starts
-bufferedWalk :: GB -> IORef Input -> [Direction] -> IO ()
-bufferedWalk gb inRef dirs =
-    case dirs of
+bufferedWalk :: GB -> IORef Input -> [Input] -> IO ()
+bufferedWalk gb inRef inps =
+    case inps of
         [] -> pure ()
         d:ds -> do
             inBattle <- cpuRead gb wIsInBattle
             if inBattle /= 0
             then pure ()
             else do
-                writeIORef inRef (directionInput d)
+                writeIORef inRef d
                 waitForWalkStart gb
                 waitForStep gb
                 bufferedWalk gb inRef ds
@@ -78,3 +63,6 @@ bufferedWalk gb inRef dirs =
         else do
             advanceFrame gb
             waitForStep gb
+
+waitForItemJingle :: GB -> IO ()
+waitForItemJingle gb = advanceUntil gb ((== 0x86) <$> cpuRead gb 0xC02A)
