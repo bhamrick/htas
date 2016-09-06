@@ -49,3 +49,7 @@ foreign import ccall "gambatte_settracecallback" gambatte_settracecallback :: GB
 foreign import ccall "wrapper" createTraceCallback :: (Ptr () -> IO ()) -> IO (FunPtr (Ptr () -> IO ()))
 
 foreign import ccall "gambatte_loadsavedata" gambatte_loadsavedata :: GB -> CString -> IO ()
+
+foreign import ccall "wrapper" createInputGetter :: IO CUInt -> IO (FunPtr (IO CUInt))
+
+foreign import ccall "gambatte_setinputgetter" gambatte_setinputgetter :: GB -> FunPtr (IO CUInt) -> IO ()

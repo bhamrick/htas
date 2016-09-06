@@ -4,6 +4,7 @@ module HTas.Low where
 -- Low level abstractions over the direct interface
 
 import Control.Monad
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Foreign hiding (void)
@@ -112,6 +113,15 @@ advanceFrame gb = do
     free samples
     when (ret < 0) (advanceFrame gb)
 
+advanceUntil :: GB -> IO Bool -> IO ()
+advanceUntil gb cond = do
+    done <- cond
+    if done
+    then pure ()
+    else do
+        advanceFrame gb
+        advanceUntil gb cond
+
 getCycleCount :: GB -> IO Integer
 getCycleCount gb = do
     fromIntegral <$> gambatte_getcyclecount gb
@@ -126,6 +136,12 @@ isCgb gb = toInteger <$> gambatte_iscgb gb
 
 cpuRead :: GB -> Integer -> IO Word8
 cpuRead gb addr = gambatte_cpuread gb (fromInteger addr)
+
+cpuReadW :: GB -> Integer -> IO Word16
+cpuReadW gb addr = do
+    lo <- cpuRead gb addr
+    hi <- cpuRead gb (addr+1)
+    pure $ fromIntegral lo + 256 * fromIntegral hi
 
 data TraceData = TraceData
     { trace_cycle :: Int
@@ -223,3 +239,47 @@ loadSaveData :: GB -> ByteString -> IO ()
 loadSaveData gb dat = do
     BS.useAsCString dat $ \cDat ->
         gambatte_loadsavedata gb cDat
+
+loadSaveFile :: GB -> FilePath -> IO ()
+loadSaveFile gb path = do
+    dat <- BS.readFile path
+    loadSaveData gb dat
+
+newtype Input = Input Word8
+    deriving (Eq, Show, Ord)
+
+instance Monoid Input where
+    mempty = Input 0
+    mappend (Input a) (Input b) = Input (a .|. b)
+
+i_Down :: Input
+i_Down = Input 0x80
+
+i_Up :: Input
+i_Up = Input 0x40
+
+i_Left :: Input
+i_Left = Input 0x20
+
+i_Right :: Input
+i_Right = Input 0x10
+
+i_Start :: Input
+i_Start = Input 0x08
+
+i_Select :: Input
+i_Select = Input 0x04
+
+i_B :: Input
+i_B = Input 0x02
+
+i_A :: Input
+i_A = Input 0x01
+
+setInputGetter :: GB -> IO Input -> IO ()
+setInputGetter gb getter = do
+    cGetter <- createInputGetter ((\(Input w) -> fromIntegral w) <$> getter)
+    gambatte_setinputgetter gb cGetter
+
+reset :: GB -> IO ()
+reset gb = gambatte_reset gb 0
