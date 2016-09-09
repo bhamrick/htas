@@ -17,16 +17,25 @@ import Red.Battle
 import Red.Intro
 import Red.Overworld
 import Red.Save
+import MoonManip
 
 main :: IO ()
 main = do
     gb <- create
     loadRomFile gb "pokered.gbc"
-    dat <- BS.readFile "pokered_moon_bc_nerd.sav"
+    dat <- BS.readFile "pokered_r3_lass.sav"
 
+    {-
+    loadSaveData gb dat
+    (loc, enc) <- r3LassManip gb
+    printf "%s\t" (show loc)
+    case enc of
+        Nothing -> printf "No encounter\n"
+        Just (species, level, dv1, dv2) -> printf "Species: %d\tLevel: %d\tDVs: %02x%02x\n" species level dv1 dv2
+    -}
     for_ [0..59] $ \frame -> do
         loadSaveData gb (setSaveFrames frame dat)
-        (loc, enc) <- moonBcNerdManip gb
+        (loc, enc) <- r3LassManip gb
         printf "IGT0: %2d\t%s\t" frame (show loc)
         case enc of
             Nothing -> printf "No encounter\n"
@@ -39,6 +48,118 @@ setSaveFrames f dat =
         dat'' = editByte saveMainDataChecksum checksum dat'
     in
     dat''
+
+r3LassManip :: GB -> IO (Location, Maybe (Word8, Word8, Word8, Word8))
+r3LassManip gb = do
+    reset gb
+    doOptimalIntro gb
+
+    inputRef <- newIORef mempty
+    encounterRef <- newIORef False
+
+    setInputGetter gb (readIORef inputRef)
+    setTraceCallback gb $ \dat -> do
+        let addr = trace_PC dat
+        when (addr == 0x7916) $ do
+            writeIORef encounterRef True
+
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Down, 1)
+        , (i_Right, 6)
+        , (i_Up, 1)
+        ]
+    encountered <- readIORef encounterRef
+    when (not encountered) $ do
+        writeIORef inputRef (i_Up <> i_A)
+        waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Up, 5)
+        , (i_Right, 1)
+        , (i_Up, 3)
+        ]
+    encountered <- readIORef encounterRef
+    when (not encountered) $ do
+        writeIORef inputRef (i_Up <> i_A)
+        waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Up, 5)
+        , (i_Up <> i_A, 1)
+        , (i_Up, 15)
+        , (i_Left, 12)
+        , (i_Down, 4)
+        , (i_Left, 7)
+        , (i_Down, 4)
+        -- B1F
+        , (i_Left, 8)
+        , (i_Down, 2)
+        -- B2F (Mega Punch)
+        , (i_Right, 3)
+        , (i_Up, 3)
+        , (i_Left, 1)
+        , (i_Up, 1)
+        , (i_Right, 1)
+        ]
+    encountered <- readIORef encounterRef
+    when (not encountered) $ do
+        writeIORef inputRef (i_Right <> i_A)
+        waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Down, 4)
+        , (i_Left, 3)
+        -- B1F
+        , (i_Right, 8)
+        , (i_Up, 2)
+        -- 1F
+        , (i_Down, 6)
+        , (i_Left, 6)
+        , (i_Up, 15)
+        , (i_Left, 8)
+        ]
+    encountered <- readIORef encounterRef
+    when (not encountered) $ do
+        writeIORef inputRef (i_Left <> i_A)
+        waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Right, 2)
+        , (i_Down, 3)
+        -- B1F
+        , (i_Right, 2)
+        , (i_Down, 12)
+        , (i_Right, 14)
+        -- B2F
+        , (i_Right, 2)
+        , (i_Up, 3)
+        , (i_Right, 3)
+        , (i_Down, 2)
+        , (i_Right, 7)
+        , (i_Up, 2)
+        , (i_Right, 3)
+        , (i_Down, 10)
+        , (i_Left, 2)
+        , (i_Down, 7)
+        , (i_Left, 24)
+        , (i_Up, 11)
+        , (i_Right, 1)
+        , (i_Left, 1)
+        , (i_Right, 1)
+        , (i_Left, 1)
+        , (i_Right, 1)
+        , (i_Left, 1)
+        , (i_Up, 3)
+        ]
+
+    loc <- getLocation gb
+    encountered <- readIORef encounterRef
+    encData <- if encountered
+        then do
+            advanceUntil gb ((/= 0) <$> cpuRead gb wIsInBattle)
+            species <- cpuRead gb wEnemyMonSpecies
+            level <- cpuRead gb wEnemyMonLevel
+            dv1 <- cpuRead gb wEnemyMonAtkDefDV
+            dv2 <- cpuRead gb wEnemyMonSpdSpcDV
+            pure $ Just (species, level, dv1, dv2)
+        else pure Nothing
+    pure (loc, encData)
 
 moonBcNerdManip :: GB -> IO (Location, Maybe (Word8, Word8, Word8, Word8))
 moonBcNerdManip gb = do
@@ -53,6 +174,13 @@ moonBcNerdManip gb = do
         let addr = trace_PC dat
         when (addr == 0x7916) $ do
             writeIORef encounterRef True
+        {-
+        when (addr == 0x7870) $ do
+            loc <- getLocation gb
+            rAdd <- cpuRead gb 0xFFD3
+            rSub <- cpuRead gb 0xFFD4
+            printf "%s\thRandomAdd: %02x\thRandomSub: %02x\n" (show loc) rAdd rSub
+        -}
 
     bufferedWalk gb inputRef . rleExpand $
         [ (i_Down, 1)

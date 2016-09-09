@@ -283,3 +283,17 @@ setInputGetter gb getter = do
 
 reset :: GB -> IO ()
 reset gb = gambatte_reset gb 0
+
+saveState :: GB -> IO ByteString
+saveState gb = do
+    len <- gambatte_newstatelen gb
+    dat <- mallocBytes (fromIntegral len)
+    void $ gambatte_newstatesave gb dat len
+    bsDat <- BS.packCStringLen (dat, fromIntegral len)
+    free dat
+    pure bsDat
+
+loadState :: GB -> ByteString -> IO ()
+loadState gb bsDat = do
+    BS.useAsCStringLen bsDat $ \(dat, len) ->
+        void $ gambatte_newstateload gb dat (fromIntegral len)

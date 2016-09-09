@@ -53,3 +53,9 @@ foreign import ccall "gambatte_loadsavedata" gambatte_loadsavedata :: GB -> CStr
 foreign import ccall "wrapper" createInputGetter :: IO CUInt -> IO (FunPtr (IO CUInt))
 
 foreign import ccall "gambatte_setinputgetter" gambatte_setinputgetter :: GB -> FunPtr (IO CUInt) -> IO ()
+
+foreign import ccall "gambatte_newstatelen" gambatte_newstatelen :: GB -> IO CInt
+
+foreign import ccall "gambatte_newstatesave" gambatte_newstatesave :: GB -> CString -> CInt -> IO CInt
+
+foreign import ccall "gambatte_newstateload" gambatte_newstateload :: GB -> CString -> CInt -> IO CInt
