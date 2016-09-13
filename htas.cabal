@@ -52,4 +52,5 @@ executable test
                 , bytestring >=0.10
                 , filepath >=1.4
                 , random >=1.1
+                , vector >=0.10
   default-language:    Haskell2010

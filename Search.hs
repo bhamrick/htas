@@ -8,75 +8,134 @@ data Segment a b = Segment
     , apply :: b -> a -> IO (a, Double)
     }
 
-data SearchState a b =
-    SearchState
-        { segment :: Segment a b
-        , initialState :: a
-        , currentPath :: b
-        , currentResult :: (a, Double)
-        }
+data Checkpoint a b = Checkpoint
+    { revPaths :: [b]
+    , currentState :: a
+    , futureSegments :: [Segment a b]
+    , value :: Double
+    , segmentCount :: Integer
+    }
 
--- Search parameters
-reconsiderProbability = 0.5
-backtrackProbability = 0.1
-replacementRatio = 1
-replacementProbability p q = if q == 0 then 0 else exp (-replacementRatio * p / q)
-acceptRatio = 1
-acceptProbability v = 1 - exp (-acceptRatio * v)
+data SearchState a b = SearchState
+    { initialState :: a
+    , segments :: [Segment a b]
+    , checkpoints :: [Checkpoint a b]
+    }
+
+baseReplaceProbability :: Checkpoint a b -> Checkpoint a b -> Double
+baseReplaceProbability oldCheck newCheck =
+    let seg1 = fromInteger (segmentCount oldCheck)
+        seg2 = fromInteger (segmentCount newCheck)
+        val1 = value oldCheck
+        val2 = value newCheck
+    in
+    if val2 == 0 then 0
+    else min 1 $ exp (0.2*(seg2-seg1) - val1/val2)
 
 coin :: Double -> IO Bool
 coin p = (< p) <$> randomRIO (0, 1)
 
-search :: Show b => [SearchState a b] -> a -> [Segment a b] -> IO [SearchState a b]
-search lead a segs =
-    reverse <$> go (reverse lead) a segs
+index :: Int -> [a] -> Maybe a
+index n l =
+    case l of
+        [] -> Nothing
+        a:as ->
+            if n == 0
+            then Just a
+            else index (n-1) as
+
+setIndex :: Int -> a -> [a] -> [a]
+setIndex n a l =
+    let
+    (start, end) = splitAt n l
+    in
+    case end of
+        [] -> start
+        _:as -> start ++ (a:as)
+
+forFirst :: [a] -> (a -> IO (Maybe b)) -> IO (Maybe b)
+forFirst l f =
+    case l of
+        [] -> pure Nothing
+        a:as -> do
+            mb <- f a
+            case mb of
+                Nothing -> forFirst as f
+                Just b -> pure (Just b)
+
+forFirstWithIndex :: [a] -> (Int -> a -> IO (Maybe b)) -> IO (Maybe b)
+forFirstWithIndex l f = go l f 0
     where
-    go acc a segs =
-        case segs of
-            [] -> pure acc
-            s:ss -> do
-                path <- generate s
-                (a', v) <- apply s path a
-                accept <- coin (acceptProbability v)
-                if accept
-                then do
-                    printf "Accepting %s (value %f)\n" (show path) v
-                    go
-                        (SearchState
-                            { segment = s
-                            , initialState = a
-                            , currentPath = path
-                            , currentResult = (a', v)
-                            } : acc
-                        )
-                        a'
-                        ss
-                else do
-                    shouldReconsider <- coin reconsiderProbability
-                    if shouldReconsider 
-                    then do
-                        printf "Reconsidering\n"
-                        case acc of
-                            [] -> go acc a segs
-                            (st:sts) -> reconsider sts st segs
-                    else do
-                        go acc a segs
-    reconsider acc st segs = do
-        let (a', val') = currentResult st
-        newPath <- generate (segment st)
-        (a'', val'') <- apply (segment st) newPath (initialState st)
-        replace <- coin (replacementProbability val' val'')
-        if replace
-        then do
-            printf "Updating to %s (value %f)\n" (show newPath) val''
-            go (st { currentPath = newPath, currentResult = (a'', val'') } : acc) a'' segs
-        else do
-            backtrack <- coin backtrackProbability
-            if backtrack
-            then do
-                printf "Backtracking\n"
-                case acc of
-                    [] -> reconsider acc st segs
-                    (st':sts) -> reconsider sts st' (segment st:segs)
-            else do
-                reconsider acc st segs
+    go l f n =
+        case l of
+            [] -> pure Nothing
+            a:as -> do
+                mb <- f n a
+                case mb of
+                    Nothing -> (n+1) `seq` go as f (n+1)
+                    Just b -> pure (Just b)
+
+newCheckpoint :: SearchState a b -> IO (Maybe (Checkpoint a b))
+newCheckpoint ss = do
+    let maxN = length (checkpoints ss)
+    sourceCheck <- forFirstWithIndex (checkpoints ss) $ \i check -> do
+        shouldUse <- coin (1/(fromIntegral maxN + 1 - fromIntegral i))
+        if shouldUse
+        then pure $ Just check
+        else pure Nothing
+    case sourceCheck of
+        Nothing -> do
+            -- Generate from initial state
+            case segments ss of
+                [] -> pure Nothing
+                seg:rest -> do
+                    path <- generate seg 
+                    (endState, val) <- apply seg path (initialState ss)
+                    pure . Just $ Checkpoint
+                        { revPaths = [path]
+                        , currentState = endState
+                        , futureSegments = rest
+                        , value = val
+                        , segmentCount = 1
+                        }
+        Just check -> do
+            -- Generate from intermediate state
+            case futureSegments check of
+                [] -> pure Nothing
+                seg:rest -> do
+                    path <- generate seg
+                    (endState, val) <- apply seg path (currentState check)
+                    pure . Just $ Checkpoint
+                        { revPaths = path:(revPaths check)
+                        , currentState = endState
+                        , futureSegments = rest
+                        , value = val
+                        , segmentCount = segmentCount check + 1
+                        }
+
+considerCheckpoint :: Checkpoint a b -> SearchState a b -> IO (SearchState a b)
+considerCheckpoint check ss = do
+    if value check > 0
+    then do
+        let maybeOldCheck = index (fromInteger $ segmentCount check - 1) (checkpoints ss)
+        case maybeOldCheck of
+            Nothing -> pure $ ss { checkpoints = checkpoints ss ++ [check] }
+            Just oldCheck -> do
+                shouldReplace <- coin $ baseReplaceProbability oldCheck check
+                if shouldReplace
+                then pure $ ss { checkpoints = setIndex (fromInteger $ segmentCount check - 1) check (checkpoints ss) }
+                else pure $ ss
+    else pure ss
+
+searchIteration :: SearchState a b -> IO (SearchState a b)
+searchIteration ss = do
+    mCheck <- newCheckpoint ss
+    case mCheck of
+        Nothing -> pure ss
+        Just c -> considerCheckpoint c ss
+
+iterateM :: Int -> (a -> IO a) -> a -> IO a
+iterateM n f a =
+    if n == 0
+    then pure a
+    else f a >>= iterateM (n-1) f

@@ -6,8 +6,10 @@ import qualified Data.ByteString as BS
 import Data.Foldable
 import Data.IORef
 import Data.Monoid
+import Data.Traversable
 import Foreign
 import Foreign.C.Types
+import System.IO
 import Text.Printf
 
 import HTas.Direct
@@ -17,29 +19,59 @@ import Red.Battle
 import Red.Intro
 import Red.Overworld
 import Red.Save
+import Search
 import MoonManip
 
 main :: IO ()
 main = do
+    hSetBuffering stdout NoBuffering
+
     gb <- create
     loadRomFile gb "pokered.gbc"
     dat <- BS.readFile "pokered_r3_lass.sav"
 
-    {-
-    loadSaveData gb dat
-    (loc, enc) <- r3LassManip gb
-    printf "%s\t" (show loc)
-    case enc of
-        Nothing -> printf "No encounter\n"
-        Just (species, level, dv1, dv2) -> printf "Species: %d\tLevel: %d\tDVs: %02x%02x\n" species level dv1 dv2
-    -}
-    for_ [0..59] $ \frame -> do
+    inputRef <- newIORef mempty
+    encounterRef <- newIORef False
+
+    printf "Creating initial states"
+    initialStateGroup <- for [0..59] $ \frame -> do
+        printf "."
         loadSaveData gb (setSaveFrames frame dat)
-        (loc, enc) <- r3LassManip gb
-        printf "IGT0: %2d\t%s\t" frame (show loc)
-        case enc of
-            Nothing -> printf "No encounter\n"
-            Just (species, level, dv1, dv2) -> printf "Species: %d\tLevel: %d\tDVs: %02x%02x\n" species level dv1 dv2
+        reset gb
+        doOptimalIntro gb
+        saveState gb
+    printf "\n"
+
+    setInputGetter gb (readIORef inputRef)
+    setTraceCallback gb $ \dat -> do
+        let addr = trace_PC dat
+        when (addr == 0x7916) $ do
+            writeIORef encounterRef True
+
+    let initialSearchState = SearchState
+            { initialState = initialStateGroup
+            , segments = r3LassSegments gb inputRef encounterRef
+            , checkpoints = []
+            }
+
+    searchLoop gb initialSearchState
+
+searchLoop :: GB -> SearchState StateGroup [Input] -> IO ()
+searchLoop gb ss = do
+    ss' <- iterateM 20 searchIteration ss
+
+    printf "\n"
+    for_ (checkpoints ss') $ \check -> do
+        printf "Segment %d Value %f : %s\t" (segmentCount check) (value check) (show . reverse $ revPaths check)
+        case currentState check of
+            [] -> printf "Checkpoint has no valid states!\n"
+            s:_ -> do
+                loadState gb s
+                loc <- getLocation gb
+                printf "%s\n" (show loc)
+    printf "\n"
+
+    searchLoop gb ss'
 
 setSaveFrames :: Word8 -> ByteString -> ByteString
 setSaveFrames f dat =
