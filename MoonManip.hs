@@ -34,7 +34,7 @@ selectRandom v = do
 
 addAPresses :: [Input] -> IO [Input]
 addAPresses inps = do
-    shouldAdd <- coin 0.2
+    shouldAdd <- coin 0.7
     if shouldAdd
     then do
         aIdx <- randomRIO (1, length inps - 1)

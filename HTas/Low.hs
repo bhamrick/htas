@@ -220,6 +220,10 @@ setTraceCallback gb cb = do
     cb' :: Ptr () -> IO ()
     cb' p = peek (castPtr p) >>= cb
 
+clearTraceCallback :: GB -> IO ()
+clearTraceCallback gb = do
+    gambatte_settracecallback gb nullFunPtr
+
 traceRegs :: TraceData -> Regs
 traceRegs dat =
     Regs

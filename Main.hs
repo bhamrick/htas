@@ -5,8 +5,13 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Foldable
 import Data.IORef
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Maybe
 import Data.Monoid
 import Data.Traversable
+import Data.Vector (Vector)
+import qualified Data.Vector as Vector
 import Foreign
 import Foreign.C.Types
 import System.IO
@@ -31,47 +36,393 @@ main = do
     dat <- BS.readFile "pokered_r3_lass.sav"
 
     inputRef <- newIORef mempty
-    encounterRef <- newIORef False
+
+    for_ [0..59] $ \frame -> do
+        loadSaveData gb (setSaveFrames frame dat)
+        (loc, encData) <- r3LassManip gb inputRef
+        printf "IGT0: %2d\t%s\t" frame (show loc)
+        case encData of
+            Nothing -> do
+                printf "No encounter\n"
+            Just (species, level, dv1, dv2) -> do
+                printf "Species: %d\tLevel: %d\tDVs: %02x%02x\n" species level dv1 dv2
+
+    {-
+    setInputGetter gb (readIORef inputRef)
 
     printf "Creating initial states"
-    initialStateGroup <- for [0..59] $ \frame -> do
+    initialStateGroup <- fmap catMaybes . for [0..59] $ \frame -> do
         printf "."
         loadSaveData gb (setSaveFrames frame dat)
-        reset gb
-        doOptimalIntro gb
-        saveState gb
+        startSegments gb inputRef
     printf "\n"
 
+    searchLoop gb inputRef initialStateGroup
+    -}
+
+r3LassManip :: GB -> IORef Input -> IO (Location, Maybe (Word8, Word8, Word8, Word8))
+r3LassManip gb inputRef = do
+    reset gb
+    doOptimalIntro gb
     setInputGetter gb (readIORef inputRef)
-    setTraceCallback gb $ \dat -> do
-        let addr = trace_PC dat
-        when (addr == 0x7916) $ do
-            writeIORef encounterRef True
+    clearTraceCallback gb
 
-    let initialSearchState = SearchState
-            { initialState = initialStateGroup
-            , segments = r3LassSegments gb inputRef encounterRef
-            , checkpoints = []
-            }
+    -- Automated search path
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Right, 1)
+        , (i_Down, 1)
+        , (i_Right, 5)
+        , (i_Up, 1)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Up, 5)
+        , (i_Right, 1)
+        , (i_Up, 3)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Left, 1)
+        , (i_Up, 15)
+        , (i_Left, 2)
+        , (i_Up, 5)
+        , (i_Left, 2)
+        , (i_Up, 1)
+        , (i_Left, 2)
+        -- Past lass
+        , (i_Down, 1)
+        , (i_Left, 4)
+        , (i_Down, 1)
+        , (i_Left, 5)
+        , (i_Down, 1)
+        , (i_Left, 1)
+        , (i_Down, 1)
+        , (i_Left, 2)
+        , (i_Down, 4)
+        -- B1F
+        , (i_Left, 1)
+        , (i_Down, 2)
+        , (i_Left, 7)
+        -- B2F
+        , (i_Right, 1)
+        , (i_Up, 1)
+        , (i_Right, 2)
+        , (i_Up, 2)
+        , (i_Left, 1)
+        , (i_Up, 1)
+        , (i_Right, 1)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Down, 3)
+        , (i_Left, 2)
+        , (i_Down, 1)
+        , (i_Left, 1)
+        -- B1F
+        , (i_Up, 1)
+        , (i_Right, 6)
+        , (i_Up, 1)
+        , (i_Right, 2)
+        -- 1F
+        , (i_Down, 1)
+        , (i_Left, 1)
+        , (i_Down, 5)
+        , (i_Left, 5)
+        , (i_Up, 2)
+        , (i_Left, 1)
+        , (i_Up, 2)
+        , (i_Left, 1)
+        , (i_Up, 4)
+        , (i_Left, 1)
+        , (i_Up, 3)
+        , (i_Left, 1)
+        , (i_Up, 2)
+        , (i_Left, 1)
+        , (i_Up, 1)
+        , (i_Left, 1)
+        , (i_Up, 1)
+        , (i_Left, 2)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Down, 1)
+        , (i_Right, 1)
+        , (i_Down, 1)
+        , (i_Right, 1)
+        , (i_Down, 1)
+        -- B1F
+        , (i_Down, 3)
+        , (i_Right, 1)
+        , (i_Down, 6)
+        , (i_Right, 1)
+        , (i_Down, 2)
+        , (i_Right, 10)
+        , (i_Down, 1)
+        , (i_Right, 4)
+        -- B2F
+        , (i_Right, 1)
+        , (i_Up, 2)
+        , (i_Right, 1)
+        , (i_Up, 1)
+        , (i_Right, 3)
+        , (i_Right, 1)
+        , (i_Down, 2)
+        , (i_Right, 5)
+        , (i_Up, 2)
+        , (i_Right, 4)
+        , (i_Down, 8)
+        , (i_Left, 3)
+        , (i_Down, 2)
+        , (i_Left, 1)
+        , (i_Down, 7)
+        , (i_Left, 21)
+        -- Freedom
+        , (i_Left, 1)
+        , (i_Up, 3)
+        , (i_Up {-<> i_A-}, 1)
+        , (i_Up, 4)
+        , (i_Up {-<> i_A-}, 1)
+        , (i_Up, 5)
+        ]
+    loc <- getLocation gb
+    encountered <- (/= 0) <$> cpuRead gb wIsInBattle
+    encData <- if encountered
+        then Just <$> getEncounterData gb
+        else pure Nothing
+    pure $ (loc, encData)
 
-    searchLoop gb initialSearchState
+startSegments :: GB -> IORef Input -> IO (Maybe ByteString)
+startSegments gb inputRef = do
+    reset gb
+    doOptimalIntro gb
+    setInputGetter gb (readIORef inputRef)
+    clearTraceCallback gb
 
-searchLoop :: GB -> SearchState StateGroup [Input] -> IO ()
-searchLoop gb ss = do
-    ss' <- iterateM 20 searchIteration ss
+    -- Automated search path
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Right, 1)
+        , (i_Down, 1)
+        , (i_Right, 5)
+        , (i_Up, 1)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Up, 5)
+        , (i_Right, 1)
+        , (i_Up, 3)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Left, 1)
+        , (i_Up, 15)
+        , (i_Left, 2)
+        , (i_Up, 5)
+        , (i_Left, 2)
+        , (i_Up, 1)
+        , (i_Left, 2)
+        -- Past lass
+        , (i_Down, 1)
+        , (i_Left, 4)
+        , (i_Down, 1)
+        , (i_Left, 5)
+        , (i_Down, 1)
+        , (i_Left, 1)
+        , (i_Down, 1)
+        , (i_Left, 2)
+        , (i_Down, 4)
+        -- B1F
+        , (i_Left, 1)
+        , (i_Down, 2)
+        , (i_Left, 7)
+        -- B2F
+        , (i_Right, 1)
+        , (i_Up, 1)
+        , (i_Right, 2)
+        , (i_Up, 2)
+        , (i_Left, 1)
+        , (i_Up, 1)
+        , (i_Right, 1)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Down, 3)
+        , (i_Left, 2)
+        , (i_Down, 1)
+        , (i_Left, 1)
+        -- B1F
+        , (i_Up, 1)
+        , (i_Right, 6)
+        , (i_Up, 1)
+        , (i_Right, 2)
+        -- 1F
+        , (i_Down, 1)
+        , (i_Left, 1)
+        , (i_Down, 5)
+        , (i_Left, 5)
+        , (i_Up, 2)
+        , (i_Left, 1)
+        , (i_Up, 2)
+        , (i_Left, 1)
+        , (i_Up, 4)
+        , (i_Left, 1)
+        , (i_Up, 3)
+        , (i_Left, 1)
+        , (i_Up, 2)
+        , (i_Left, 1)
+        , (i_Up, 1)
+        , (i_Left, 1)
+        , (i_Up, 1)
+        , (i_Left, 2)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Down, 1)
+        , (i_Right, 1)
+        , (i_Down, 1)
+        , (i_Right, 1)
+        , (i_Down, 1)
+        -- B1F
+        , (i_Down, 3)
+        , (i_Right, 1)
+        , (i_Down, 6)
+        , (i_Right, 1)
+        , (i_Down, 2)
+        , (i_Right, 10)
+        , (i_Down, 1)
+        , (i_Right, 4)
+        -- B2F
+        , (i_Right, 1)
+        , (i_Up, 2)
+        , (i_Right, 1)
+        , (i_Up, 1)
+        , (i_Right, 3)
+        , (i_Right, 1)
+        , (i_Down, 2)
+        , (i_Right, 5)
+        , (i_Up, 2)
+        , (i_Right, 4)
+        , (i_Down, 8)
+        , (i_Left, 3)
+        , (i_Down, 2)
+        , (i_Left, 1)
+        , (i_Down, 7)
+        , (i_Left, 21)
+        -- Freedom
+        , (i_Left, 1)
+        , (i_Up, 3)
+        , (i_Up <> i_A, 1)
+        , (i_Up, 4)
+        , (i_Up <> i_A, 1)
+        , (i_Up, 5)
+        ]
 
+    {-
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Right, 1)
+        , (i_Down, 1)
+        , (i_Right, 5)
+        , (i_Up, 1)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Up, 2)
+        , (i_Right, 1)
+        , (i_Up, 6)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    bufferedWalk gb inputRef . rleExpand $
+        [ (i_Up, 5)
+        , (i_Left, 1)
+        , (i_Up, 1)
+        , (i_Left, 1)
+        , (i_Up, 7)
+        , (i_Left, 1)
+        , (i_Up, 3)
+        , (i_Left, 1)
+        , (i_Up, 5)
+        , (i_Left, 3)
+        -- After passing lass
+        , (i_Left, 2)
+        , (i_Down, 2)
+        , (i_Left, 6)
+        , (i_Down, 2)
+        , (i_Left, 4)
+        , (i_Down, 4)
+        -- B1F
+        , (i_Left, 4)
+        , (i_Down, 1)
+        , (i_Left, 1)
+        , (i_Left <> i_A, 1)
+        , (i_Left, 2)
+        , (i_Down, 1)
+        -- B2F
+        , (i_Right, 1)
+        , (i_Up, 1)
+        , (i_Right, 2)
+        , (i_Up, 2)
+        , (i_Left, 1)
+        , (i_Up, 1)
+        , (i_Right, 1)
+        ]
+    writeIORef inputRef i_A
+    waitForItemJingle gb
+    -}
+
+    inBattle <- cpuRead gb wIsInBattle
+    if inBattle /= 0
+    then do
+        loc <- getLocation gb
+        encData <- getEncounterData gb
+        pure Nothing
+    else Just <$> saveState gb
+
+segmentPaths :: Vector [Input]
+segmentPaths =
+    fmap (\b -> if b then i_Up else i_Left) <$>
+        enumeratePaths 0 14 [(0, 10)]
+
+applyPath :: GB -> IORef Input -> [Input] -> IO (Maybe (Location, (Word8, Word8, Word8, Word8)), (Word8, Word8))
+applyPath gb inputRef path = do
+    bufferedWalk gb inputRef (path)
+
+    encountered <- (/=0) <$> cpuRead gb wIsInBattle
+    if encountered
+    then do
+        loc <- getLocation gb
+        encData <- getEncounterData gb
+        hAdd <- cpuRead gb 0xFFD3
+        hSub <- cpuRead gb 0xFFD4
+        pure $ (Just (loc, encData), (hAdd, hSub))
+    else do
+        hAdd <- cpuRead gb 0xFFD3
+        hSub <- cpuRead gb 0xFFD4
+        pure $ (Nothing, (hAdd, hSub))
+
+searchLoop :: GB -> IORef Input -> [ByteString] -> IO ()
+searchLoop gb inputRef states = do
+    path <- selectRandom segmentPaths >>= addAPresses >>= addAPresses
+    printf "%s" (show path)
+    results <- for states $ \state -> do
+        printf "."
+        loadState gb state
+        applyPath gb inputRef path
     printf "\n"
-    for_ (checkpoints ss') $ \check -> do
-        printf "Segment %d Value %f : %s\t" (segmentCount check) (value check) (show . reverse $ revPaths check)
-        case currentState check of
-            [] -> printf "Checkpoint has no valid states!\n"
-            s:_ -> do
-                loadState gb s
-                loc <- getLocation gb
-                printf "%s\n" (show loc)
-    printf "\n"
+    for_ (Map.toList (countMap results)) $ \(v, c) -> do
+        printf "%s\t%d\n" (show v) c
+    searchLoop gb inputRef states
 
-    searchLoop gb ss'
+countMap :: Ord a => [a] -> Map a Int
+countMap = Map.fromListWith (+) . map (\x -> (x, 1))
 
 setSaveFrames :: Word8 -> ByteString -> ByteString
 setSaveFrames f dat =
@@ -81,261 +432,14 @@ setSaveFrames f dat =
     in
     dat''
 
-r3LassManip :: GB -> IO (Location, Maybe (Word8, Word8, Word8, Word8))
-r3LassManip gb = do
-    reset gb
-    doOptimalIntro gb
-
-    inputRef <- newIORef mempty
-    encounterRef <- newIORef False
-
-    setInputGetter gb (readIORef inputRef)
-    setTraceCallback gb $ \dat -> do
-        let addr = trace_PC dat
-        when (addr == 0x7916) $ do
-            writeIORef encounterRef True
-
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Down, 1)
-        , (i_Right, 6)
-        , (i_Up, 1)
-        ]
-    encountered <- readIORef encounterRef
-    when (not encountered) $ do
-        writeIORef inputRef (i_Up <> i_A)
-        waitForItemJingle gb
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Up, 5)
-        , (i_Right, 1)
-        , (i_Up, 3)
-        ]
-    encountered <- readIORef encounterRef
-    when (not encountered) $ do
-        writeIORef inputRef (i_Up <> i_A)
-        waitForItemJingle gb
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Up, 5)
-        , (i_Up <> i_A, 1)
-        , (i_Up, 15)
-        , (i_Left, 12)
-        , (i_Down, 4)
-        , (i_Left, 7)
-        , (i_Down, 4)
-        -- B1F
-        , (i_Left, 8)
-        , (i_Down, 2)
-        -- B2F (Mega Punch)
-        , (i_Right, 3)
-        , (i_Up, 3)
-        , (i_Left, 1)
-        , (i_Up, 1)
-        , (i_Right, 1)
-        ]
-    encountered <- readIORef encounterRef
-    when (not encountered) $ do
-        writeIORef inputRef (i_Right <> i_A)
-        waitForItemJingle gb
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Down, 4)
-        , (i_Left, 3)
-        -- B1F
-        , (i_Right, 8)
-        , (i_Up, 2)
-        -- 1F
-        , (i_Down, 6)
-        , (i_Left, 6)
-        , (i_Up, 15)
-        , (i_Left, 8)
-        ]
-    encountered <- readIORef encounterRef
-    when (not encountered) $ do
-        writeIORef inputRef (i_Left <> i_A)
-        waitForItemJingle gb
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Right, 2)
-        , (i_Down, 3)
-        -- B1F
-        , (i_Right, 2)
-        , (i_Down, 12)
-        , (i_Right, 14)
-        -- B2F
-        , (i_Right, 2)
-        , (i_Up, 3)
-        , (i_Right, 3)
-        , (i_Down, 2)
-        , (i_Right, 7)
-        , (i_Up, 2)
-        , (i_Right, 3)
-        , (i_Down, 10)
-        , (i_Left, 2)
-        , (i_Down, 7)
-        , (i_Left, 24)
-        , (i_Up, 11)
-        , (i_Right, 1)
-        , (i_Left, 1)
-        , (i_Right, 1)
-        , (i_Left, 1)
-        , (i_Right, 1)
-        , (i_Left, 1)
-        , (i_Up, 3)
-        ]
-
-    loc <- getLocation gb
-    encountered <- readIORef encounterRef
-    encData <- if encountered
-        then do
-            advanceUntil gb ((/= 0) <$> cpuRead gb wIsInBattle)
-            species <- cpuRead gb wEnemyMonSpecies
-            level <- cpuRead gb wEnemyMonLevel
-            dv1 <- cpuRead gb wEnemyMonAtkDefDV
-            dv2 <- cpuRead gb wEnemyMonSpdSpcDV
-            pure $ Just (species, level, dv1, dv2)
-        else pure Nothing
-    pure (loc, encData)
-
-moonBcNerdManip :: GB -> IO (Location, Maybe (Word8, Word8, Word8, Word8))
-moonBcNerdManip gb = do
-    reset gb
-    doOptimalIntro gb
-
-    inputRef <- newIORef mempty
-    encounterRef <- newIORef False
-
-    setInputGetter gb (readIORef inputRef)
-    setTraceCallback gb $ \dat -> do
-        let addr = trace_PC dat
-        when (addr == 0x7916) $ do
-            writeIORef encounterRef True
-        {-
-        when (addr == 0x7870) $ do
-            loc <- getLocation gb
-            rAdd <- cpuRead gb 0xFFD3
-            rSub <- cpuRead gb 0xFFD4
-            printf "%s\thRandomAdd: %02x\thRandomSub: %02x\n" (show loc) rAdd rSub
-        -}
-
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Down, 1)
-        , (i_Right, 6)
-        , (i_Up, 1)
-        ]
-    encountered <- readIORef encounterRef
-    when (not encountered) $ do
-        writeIORef inputRef (i_Up <> i_A)
-        waitForItemJingle gb
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Up, 4)
-        , (i_Right, 1)
-        , (i_Up, 4)
-        ]
-    encountered <- readIORef encounterRef
-    when (not encountered) $ do
-        writeIORef inputRef (i_Up <> i_A)
-        waitForItemJingle gb
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Up, 21)
-        , (i_Left, 12)
-        , (i_Down, 4)
-        , (i_Left, 7)
-        , (i_Down, 4)
-        -- B1F
-        , (i_Down, 2)
-        , (i_Left, 8)
-        -- B2F (Mega punch)
-        , (i_Right, 3)
-        , (i_Up, 3)
-        , (i_Left, 1)
-        , (i_Up, 1)
-        , (i_Right, 1)
-        ]
-    encountered <- readIORef encounterRef
-    when (not encountered) $ do
-        writeIORef inputRef (i_Right <> i_A)
-        waitForItemJingle gb
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Down, 4)
-        , (i_Left, 3)
-        -- B1F
-        , (i_Right, 8)
-        , (i_Up, 2)
-        -- 1F
-        , (i_Down, 6)
-        , (i_Left, 6)
-        , (i_Up, 15)
-        , (i_Left, 8)
-        ]
-    encountered <- readIORef encounterRef
-    when (not encountered) $ do
-        writeIORef inputRef (i_Left <> i_A)
-        waitForItemJingle gb
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Right, 2)
-        , (i_Down, 3)
-        -- B1F
-        , (i_Down, 12)
-        , (i_Right, 16)
-        -- B2F
-        , (i_Up, 3)
-        , (i_Right, 5)
-        , (i_Down, 2)
-        , (i_Right, 7)
-        , (i_Up, 2)
-        , (i_Right, 3)
-        , (i_Down, 8)
-        , (i_Left, 2)
-        , (i_Down, 9)
-        , (i_Left <> i_A, 1)
-        , (i_Left, 20)
-        , (i_Left <> i_A, 1)
-        , (i_Left, 2)
-        , (i_Up <> i_A, 1)
-        , (i_Up, 14)
-        , (i_Right, 1)
-        ]
-
-    loc <- getLocation gb 
-    encountered <- readIORef encounterRef
-    encData <- if encountered
-        then do
-            advanceUntil gb ((/= 0) <$> cpuRead gb wIsInBattle)
-            species <- cpuRead gb wEnemyMonSpecies
-            level <- cpuRead gb wEnemyMonLevel
-            dv1 <- cpuRead gb wEnemyMonAtkDefDV
-            dv2 <- cpuRead gb wEnemyMonSpdSpcDV
-            pure $ Just (species, level, dv1, dv2)
-        else pure Nothing
-    pure (loc, encData)
-
-fbeeManip :: GB -> IO (Word8, Word8, Word8, Word8)
-fbeeManip gb = do
-    reset gb
-
-    doOptimalIntro gb
-
-    inputRef <- newIORef mempty
-    encounterRef <- newIORef False
-
-    setInputGetter gb (readIORef inputRef)
-    setTraceCallback gb $ \dat -> do
-        let addr = trace_PC dat
-        when (addr == 0x7916) $ do
-            writeIORef encounterRef True
-
-    bufferedWalk gb inputRef . rleExpand $
-        [ (i_Left, 8)
-        , (i_Right, 3)
-        , (i_Left, 7)
-        , (i_Down, 3)
-        , (i_Left, 2)
-        , (i_Up, 4)
-        , (i_Down, 3)
-        ] <> cycle [(i_Up, 3), (i_Down, 3)]
+getEncounterData :: GB -> IO (Word8, Word8, Word8, Word8)
+getEncounterData gb = do
     advanceUntil gb ((/= 0) <$> cpuRead gb wIsInBattle)
     species <- cpuRead gb wEnemyMonSpecies
     level <- cpuRead gb wEnemyMonLevel
     dv1 <- cpuRead gb wEnemyMonAtkDefDV
     dv2 <- cpuRead gb wEnemyMonSpdSpcDV
-    pure (species, level, dv1, dv2)
+    pure $ (species, level, dv1, dv2)
 
 rleExpand :: [(a, Int)] -> [a]
 rleExpand runs =

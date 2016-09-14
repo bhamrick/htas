@@ -65,4 +65,7 @@ bufferedWalk gb inRef inps =
             waitForStep gb
 
 waitForItemJingle :: GB -> IO ()
-waitForItemJingle gb = advanceUntil gb ((== 0x86) <$> cpuRead gb 0xC02A)
+waitForItemJingle gb = advanceUntil gb $ do
+    jinglePlaying <- (== 0x86) <$> cpuRead gb 0xC02A
+    inBattle <- cpuRead gb wIsInBattle
+    pure $ jinglePlaying || inBattle /= 0
