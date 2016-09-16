@@ -46,9 +46,9 @@ segmentStep seg sourceRef targetRef cb = do
                     , currentState = newState
                     , value = newVal
                     }
-            cb newCheck
             if newVal > 0
             then do
+                cb newCheck
                 targetDat <- readIORef targetRef
                 case targetDat of
                     Nothing -> do

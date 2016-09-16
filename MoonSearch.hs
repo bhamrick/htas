@@ -34,32 +34,17 @@ main = do
 
     baseSave <- BS.readFile "pokered_r3_lass.sav"
 
-    printf "Creating initial states\n"
+    printf "Creating initial states"
     gb <- create
     loadRomFile gb "pokered.gbc"
     initialStates <- for [0..59] $ \frame -> do
-        printf "%d...\n" frame
+        printf "."
         loadSaveData gb (setSaveFrames frame baseSave)
         reset gb
         doOptimalIntro gb
         saveState gb
-    {-
-    initialStateVars <- for [0..59] $ \frame -> do
-        resultVar <- newEmptyMVar
-        forkIO $ do
-            gb <- create
-            loadRomFile gb "pokered.gbc"
-            loadSaveData gb (setSaveFrames frame baseSave)
-            reset gb
-            doOptimalIntro gb
-            res <- saveState gb
-            putMVar resultVar res
-            printf "Frame %d complete\n" frame
-        pure resultVar
-    printf "All initializers working\n"
-    initialStates <- for initialStateVars readMVar
-    printf "Initial states complete\n"
-    -}
+    printf "\n"
+
     launchSearch r3LassSegments initialStates
     printf "Search launched\n"
     forever $ threadDelay (10^6)
@@ -89,10 +74,10 @@ launchSearch segs initialStates = do
                     segmentStep (s gb inputRef) sourceRef targetRef $ \check -> do
                         withMVar lock $ \_ -> do
                             printf "Segment %d\tValue %f\t%s\n" (length (revPaths check)) (value check) (show . reverse $ revPaths check)
-                        when (length ss == 1 && value check > 0) $ do
+                        when (length ss == 1 && value check > 20) $ do
                             let description = printf "Value %f\t%s\n" (value check) (show . reverse $ revPaths check)
                             appendFile "almost_paths.txt" description
-                        when (length ss == 0 && value check > 0) $ do
+                        when (length ss == 0 && value check > 20) $ do
                             let description = printf "Value %f\t%s\n" (value check) (show . reverse $ revPaths check)
                             appendFile "complete_paths.txt" description
                     threadDelay 10000
