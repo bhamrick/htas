@@ -35,6 +35,15 @@ main = do
     baseSave <- BS.readFile "pokered_r3_lass.sav"
 
     printf "Creating initial states\n"
+    gb <- create
+    loadRomFile gb "pokered.gbc"
+    initialStates <- for [0..59] $ \frame -> do
+        printf "%d...\n" frame
+        loadSaveData gb (setSaveFrames frame baseSave)
+        reset gb
+        doOptimalIntro gb
+        saveState gb
+    {-
     initialStateVars <- for [0..59] $ \frame -> do
         resultVar <- newEmptyMVar
         forkIO $ do
@@ -50,6 +59,7 @@ main = do
     printf "All initializers working\n"
     initialStates <- for initialStateVars readMVar
     printf "Initial states complete\n"
+    -}
     launchSearch r3LassSegments initialStates
     printf "Search launched\n"
     forever $ threadDelay (10^6)

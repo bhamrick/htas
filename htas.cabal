@@ -87,8 +87,8 @@ executable moonsearch
               , libgambatte/src/video/ppu.cpp
               , libgambatte/src/video/sprite_mapper.cpp
   extra-libraries: stdc++
-  ghc-options: -pgmlg++ -g -threaded
-  cc-options: -std=c++11 -fPIC -g
+  ghc-options: -pgmlg++ -O2 -threaded
+  cc-options: -std=c++11 -fPIC -O2
   build-depends:  base >=4.8 && <4.9
                 , bytestring >=0.10
                 , containers >=0.5
