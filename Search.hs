@@ -46,7 +46,7 @@ segmentStep seg sourceRef targetRef cb = do
                     , currentState = newState
                     , value = newVal
                     }
-            if newVal > 0
+            if newVal > 20 -- Lots of paths sneak by with a value of 1, let's just restrict ourselves
             then do
                 cb newCheck
                 targetDat <- readIORef targetRef
