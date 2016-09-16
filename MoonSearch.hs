@@ -73,7 +73,7 @@ launchSearch segs initialStates = do
                 forkIO . forever $ do
                     segmentStep (s gb inputRef) sourceRef targetRef $ \check -> do
                         withMVar lock $ \_ -> do
-                            printf "Segment %d\tValue %f\t%s\n" (length (revPaths check)) (value check) (show . reverse $ revPaths check)
+                            printf "Segment %d\tValue %f\n" (length (revPaths check)) (value check)
                         when (length ss == 1 && value check > 20) $ do
                             let description = printf "Value %f\t%s\n" (value check) (show . reverse $ revPaths check)
                             appendFile "almost_paths.txt" description
