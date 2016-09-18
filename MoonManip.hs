@@ -379,32 +379,14 @@ r3LassSegments =
         }
     , \gb inputRef ->
       let
-        paths = fmap (\b -> if b then i_Down else i_Left)
-            <$> enumeratePaths 0 17 [(8, 10), (8, 10), (8, 17), (8, 17)]
+        paths = do
+            choice <- fmap (\b -> if b then i_Down else i_Left)
+                <$> enumeratePaths 0 17 [(8, 10), (8, 10), (8, 17), (8, 17)]
+            pure $ choice ++ replicate 21 i_Left
       in Segment
         { generate = selectRandom paths
         , apply = \path stateGroup -> do
             --printf "Segment 16: %s to %d states" (show path) (length stateGroup)
-            resultMaybeStates <- for stateGroup $ \state -> do
-                --printf "."
-                loadState gb state
-
-                bufferedWalk gb inputRef path
-                encountered <- (/= 0) <$> cpuRead gb wIsInBattle
-                if encountered
-                then pure Nothing
-                else Just <$> saveState gb
-            let resultStates = catMaybes resultMaybeStates
-            --printf "%d states remain\n" (length resultStates)
-            pure $ (resultStates, fromIntegral (length resultStates))
-        }
-    , \gb inputRef ->
-      let
-        paths = Vector.fromList [replicate 21 i_Left]
-      in Segment
-        { generate = selectRandom paths
-        , apply = \path stateGroup -> do
-            --printf "Segment 17: %s to %d states" (show path) (length stateGroup)
             resultMaybeStates <- for stateGroup $ \state -> do
                 --printf "."
                 loadState gb state
@@ -425,7 +407,7 @@ r3LassSegments =
       in Segment
         { generate = selectRandom paths
         , apply = \path stateGroup -> do
-            --printf "Segment 18: %s to %d states" (show path) (length stateGroup)
+            --printf "Segment 17: %s to %d states" (show path) (length stateGroup)
             resultMaybeStates <- for stateGroup $ \state -> do
                 --printf "."
                 loadState gb state

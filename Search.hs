@@ -21,8 +21,7 @@ replaceProbability oldCheck newCheck =
     let val1 = value oldCheck
         val2 = value newCheck
     in
-    if val2 == 0 then 0
-    else min 1 $ exp (-val1/val2)
+    min 1 $ exp (-(61-val2)/(61-val1))
 
 coin :: Double -> IO Bool
 coin p = (< p) <$> randomRIO (0, 1)
