@@ -55,7 +55,9 @@ segmentStep seg sourceRef targetRef cb = do
                     Just targetCheck -> do
                         shouldReplace <- coin (replaceProbability targetCheck newCheck)
                         if shouldReplace
-                        then atomicWriteIORef targetRef (Just newCheck)
+                        then do
+                            printf "Segment %d: %f -> %f\n" (length (revPaths newCheck)) (value newCheck) (value targetCheck)
+                            atomicWriteIORef targetRef (Just newCheck)
                         else pure ()
             else
                 pure ()
